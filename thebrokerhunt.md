@@ -110,3 +110,165 @@ L --> M[Archive Created<br>Shares.7z]
 
 M --> N[Persistence Added<br>AnyDesk + Task + svc_backup]
 N --> O[Logs Cleared<br>System + Application]
+```
+
+🧰 Tooling Used
+
+Microsoft Sentinel / Log Analytics
+
+Microsoft Defender for Endpoint (MDE)
+
+KQL (Kusto Query Language)
+
+MITRE ATT&CK mapping
+
+Timeline + correlation across hosts
+
+⏱️ Investigation Scope (Time Window)
+
+Most hunting was performed using:
+
+```
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+```
+
+1) Find the initial payload + hash (process launch)
+let dev = "as-pc1";
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 05:10:00);
+DeviceProcessEvents
+| where DeviceName == dev
+| where Timestamp between (t0 .. t1)
+| where FileName =~ "daniel_richardson_cv.pdf.exe"
+| project Timestamp, AccountName, FileName, ProcessCommandLine, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256
+| order by Timestamp asc
+2) Prove execution method (parent process)
+let dev = "as-pc1";
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 05:10:00);
+DeviceProcessEvents
+| where DeviceName == dev
+| where Timestamp between (t0 .. t1)
+| where FileName =~ "daniel_richardson_cv.pdf.exe"
+| project Timestamp, FileName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| order by Timestamp asc
+3) C2 domain + initiating process
+let dev = "as-pc1";
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 05:10:00);
+DeviceNetworkEvents
+| where DeviceName == dev
+| where Timestamp between (t0 .. t1)
+| where RemoteUrl contains "cdn.cloud-endpoint.net"
+| where isnotempty(InitiatingProcessFileName)
+| project Timestamp, InitiatingProcessFileName, InitiatingProcessCommandLine, RemoteUrl, RemoteIP, RemotePort, Protocol
+| order by Timestamp asc
+4) Staging infrastructure (download domain in command line)
+let dev = "as-pc2";
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceProcessEvents
+| where DeviceName == dev
+| where Timestamp between (t0 .. t1)
+| where ProcessCommandLine has "http"
+| where ProcessCommandLine has_any ("certutil","bitsadmin","invoke-webrequest","curl","wget")
+| project Timestamp, AccountName, FileName, ProcessCommandLine
+| order by Timestamp asc
+5) Credential extraction registry hive exports
+let dev = "as-pc1";
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceProcessEvents
+| where DeviceName == dev
+| where Timestamp between (t0 .. t1)
+| where FileName =~ "reg.exe"
+| where ProcessCommandLine has "save"
+| project Timestamp, AccountName, ProcessCommandLine, InitiatingProcessFileName
+| order by Timestamp asc
+6) AnyDesk download method + password set
+let dev = "as-pc1";
+let anchor = datetime(2026-01-15 04:11:47.349);
+DeviceProcessEvents
+| where DeviceName == dev
+| where Timestamp between (anchor-5m .. anchor+5m)
+| where ProcessCommandLine has_any ("AnyDesk","--set-password")
+| project Timestamp, AccountName, FileName, ProcessCommandLine, InitiatingProcessFileName, InitiatingProcessCommandLine
+| order by Timestamp asc
+7) Lateral movement evidence (RDP)
+let dev = "as-pc2";
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceProcessEvents
+| where DeviceName == dev
+| where Timestamp between (t0 .. t1)
+| where FileName =~ "mstsc.exe"
+| project Timestamp, AccountName, ProcessCommandLine
+| order by Timestamp asc
+8) Data access: payroll doc + edit artifact proof
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceFileEvents
+| where Timestamp between (t0 .. t1)
+| where FolderPath has @"\\AS-SRV\Payroll"
+| where FileName has "BACS_Payments_Dec2025"
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath, InitiatingProcessFileName, InitiatingProcessAccountName
+| order by Timestamp asc
+9) Exfil archive creation + hash
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceFileEvents
+| where Timestamp between (t0 .. t1)
+| where FileName =~ "Shares.7z"
+| where ActionType == "FileCreated"
+| project Timestamp, DeviceName, FileName, FolderPath, SHA256, InitiatingProcessFileName, InitiatingProcessAccountName
+| order by Timestamp asc
+10) Anti-forensics: log clearing
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceProcessEvents
+| where Timestamp between (t0 .. t1)
+| where FileName =~ "wevtutil.exe"
+| where ProcessCommandLine has "cl"
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine, InitiatingProcessFileName
+| order by Timestamp asc
+11) Reflective loading + tool name (memory only)
+let t0 = datetime(2026-01-15 03:40:00);
+let t1 = datetime(2026-01-15 07:30:00);
+DeviceEvents
+| where Timestamp between (t0 .. t1)
+| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where ActionType == "ClrUnbackedModuleLoaded"
+| extend AF = parse_json(AdditionalFields)
+| project Timestamp, DeviceName, ActionType, Module=tostring(AF.ModuleILPathOrName), InitiatingProcessFileName, InitiatingProcessCommandLine
+| order by Timestamp asc
+🧩 Repo Structure (Suggested)
+.
+├── README.md
+├── queries/
+│   ├── 01_initial_access.kql
+│   ├── 02_c2_and_staging.kql
+│   ├── 03_credential_access.kql
+│   ├── 04_discovery.kql
+│   ├── 05_persistence_anydesk.kql
+│   ├── 06_lateral_movement.kql
+│   ├── 07_scheduled_task_persistence.kql
+│   ├── 08_data_access_and_archive.kql
+│   └── 09_anti_forensics_memory.kql
+└── assets/
+    └── attack_flow_diagram.png  (optional later)
+👤 Author
+
+Brian Hannigan
+Cybersecurity Engineer | Threat Hunting | SIEM | Incident Response
+GitHub: https://github.com/brianhannigan
+
+
+---
+
+If you want, I can also:
+- **split those KQL blocks into individual `.kql` files** exactly matching the repo structure above (so you can paste each into `/queries/`), and
+- generate an **`assets/attack_flow_diagram.svg`** version of the Mermaid flow so your GitHub looks extra polished.
+
+Just say the word.
+::contentReference[oaicite:0]{index=0}
