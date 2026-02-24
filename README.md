@@ -1,5 +1,31 @@
 🕵️ Threat Hunt Report
 The Broker
+
+# Attack Flow Diagram – The Broker
+
+```mermaid
+flowchart LR
+
+A[User Opens Fake Resume<br>Daniel_Richardson_CV.pdf.exe]
+--> B[Initial Compromise<br>as-pc1]
+
+B --> C[Credential Theft Tool Loaded<br>SharpChrome]
+C --> D[Reflective .NET Load<br>ClrUnbackedModuleLoaded]
+
+D --> E[Injected into notepad.exe]
+
+E --> F[Lateral Movement via RDP<br>mstsc.exe]
+
+F --> G[as-pc2]
+G --> H[Accessed Payroll Share<br>BACS_Payments_Dec2025.ods]
+
+H --> I[Archive Created<br>Shares.7z]
+
+I --> J[Persistence Created<br>Scheduled Task + svc_backup]
+
+J --> K[Logs Cleared<br>System, Application]
+```
+
 📌 Executive Summary
 
 An attacker broke into the network.
