@@ -311,6 +311,8 @@ DeviceEvents
     └── attack_flow_diagram.png  (optional later)
 ```
 
-## 👤 Author
+## 👤 Author:  Brian Hannigan
+---
+Cybersecurity Engineer | Threat Hunting | SIEM | Incident Response
 
-Brian Hannigan
+GitHub: https://github.com/brianhannigan
