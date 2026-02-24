@@ -17,6 +17,78 @@ Investigate suspicious administrative activity across enterprise Windows systems
 ## 🔎 Investigation Summary
 
 An attacker executed a malicious file disguised as a resume:
+Daniel_Richardson_CV.pdf.exe
+
+
+The intrusion involved:
+
+- Credential harvesting (SharpChrome)
+- Reflective .NET assembly loading
+- Process injection into notepad.exe
+- Lateral movement via RDP
+- Scheduled task persistence
+- Backdoor account creation
+- Payroll data staging
+- Windows event log clearing
+
+---
+
+## 🧠 Key Technical Findings
+
+| Category | Finding |
+|-----------|----------|
+| Initial Access | Malicious executable disguised as resume |
+| Lateral Movement | mstsc.exe (RDP) |
+| Sensitive Data | BACS_Payments_Dec2025.ods |
+| Data Archive | Shares.7z |
+| Persistence | MicrosoftEdgeUpdateCheck scheduled task |
+| Backdoor Account | svc_backup |
+| Log Clearing | System, Application |
+| Reflective Load | ClrUnbackedModuleLoaded |
+| Memory Tool | SharpChrome |
+| Injection Target | notepad.exe |
+
+---
+
+## 🛠 Example Detection Query
+
+```kql
+DeviceEvents
+| where ActionType == "ClrUnbackedModuleLoaded"
+| extend AF = parse_json(AdditionalFields)
+| project Timestamp, DeviceName, ModuleName=tostring(AF.ModuleILPathOrName)
+```
+
+🧭 MITRE ATT&CK Techniques Observed
+
+T1055 – Process Injection
+
+T1620 – Reflective Code Loading
+
+T1070.001 – Log Clearing
+
+T1555 – Credentials from Web Browsers
+
+T1021 – Remote Services (RDP)
+
+T1053 – Scheduled Task Persistence
+
+
+🏁 Final Assessment
+
+The Broker scenario demonstrates:
+
+Human-operated intrusion behavior
+
+Fileless .NET malware execution
+
+Credential harvesting from browser stores
+
+Anti-forensics log clearing
+
+Data staging prior to exfiltration
+
+Despite attempts to hide activity, telemetry reconstruction revealed the complete attack chain.
 
 
 # Attack Flow Diagram – The Broker
@@ -45,6 +117,57 @@ J --> K[Logs Cleared<br>System, Application]
 ```
 
 📌 Executive Summary
+
+Executive Incident Summary – The Broker
+
+I conducted a full threat hunt investigation across enterprise Windows systems after detecting suspicious administrative behavior.
+
+Key Findings:
+
+A malicious executable disguised as a resume was launched.
+
+A credential theft tool (SharpChrome) was reflectively loaded into memory.
+
+The tool was injected into notepad.exe to evade detection.
+
+RDP was used for lateral movement.
+
+Payroll data was accessed and archived.
+
+A scheduled task and backdoor account were created.
+
+Windows event logs (System & Application) were cleared to hide evidence.
+
+Advanced Techniques Identified:
+
+Fileless .NET reflective loading (ClrUnbackedModuleLoaded)
+
+Process injection (T1055)
+
+Anti-forensics log clearing
+
+Credential harvesting
+
+Data staging for potential exfiltration
+
+Outcome:
+
+Despite log clearing and memory-based execution, full attack reconstruction was achieved through telemetry correlation and advanced KQL hunting.
+
+This investigation highlights skills in:
+
+Microsoft Defender Advanced Hunting
+
+Sentinel / KQL
+
+Threat hunting methodology
+
+MITRE ATT&CK mapping
+
+Timeline reconstruction
+
+Incident response analysis
+
 
 An attacker broke into the network.
 
