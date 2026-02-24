@@ -1,5 +1,23 @@
-🕵️ Threat Hunt Report
-The Broker
+# SOC Analyst Portfolio Showcase – *The Broker*
+
+# 🕵️ Threat Hunt: The Broker
+
+## 🎯 Objective
+
+Investigate suspicious administrative activity across enterprise Windows systems and determine:
+
+- How the attacker gained access  
+- How they moved laterally  
+- What data was accessed  
+- Whether persistence was established  
+- What anti-forensics techniques were used  
+
+---
+
+## 🔎 Investigation Summary
+
+An attacker executed a malicious file disguised as a resume:
+
 
 # Attack Flow Diagram – The Broker
 
