@@ -13,7 +13,7 @@
 ## 📌 Quick Answers (CTF Flags / Findings)
 
 ### Section 1 — Initial Access
-- **Initial Payload:** `daniel_richardson_cv.pdf.exe`  
+- **Initial Payload:** `daniel_richardson_cv.pdf.exe`
 - **Payload SHA256:** `48b97fd91946e81e3e7742b3554585360551551cbf9398e1f34f4bc4eac3a6b5`
 - **Launch Method (Parent Process):** `explorer.exe`
 - **Spawned Windows Process:** `notepad.exe`
@@ -112,28 +112,34 @@ M --> N[Persistence Added<br>AnyDesk + Task + svc_backup]
 N --> O[Logs Cleared<br>System + Application]
 ```
 
-🧰 Tooling Used
+---
 
-Microsoft Sentinel / Log Analytics
+## 🧰 Tooling Used
 
-Microsoft Defender for Endpoint (MDE)
+- Microsoft Sentinel / Log Analytics
+- Microsoft Defender for Endpoint (MDE)
+- KQL (Kusto Query Language)
+- MITRE ATT&CK mapping
+- Timeline + correlation across hosts
 
-KQL (Kusto Query Language)
+---
 
-MITRE ATT&CK mapping
-
-Timeline + correlation across hosts
-
-⏱️ Investigation Scope (Time Window)
+## ⏱️ Investigation Scope (Time Window)
 
 Most hunting was performed using:
 
-```
+```kusto
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
 ```
 
-1) Find the initial payload + hash (process launch)
+---
+
+## 🔎 KQL Hunt Queries
+
+### 1) Find the initial payload + hash (process launch)
+
+```kusto
 let dev = "as-pc1";
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 05:10:00);
@@ -143,7 +149,11 @@ DeviceProcessEvents
 | where FileName =~ "daniel_richardson_cv.pdf.exe"
 | project Timestamp, AccountName, FileName, ProcessCommandLine, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256
 | order by Timestamp asc
-2) Prove execution method (parent process)
+```
+
+### 2) Prove execution method (parent process)
+
+```kusto
 let dev = "as-pc1";
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 05:10:00);
@@ -153,7 +163,11 @@ DeviceProcessEvents
 | where FileName =~ "daniel_richardson_cv.pdf.exe"
 | project Timestamp, FileName, InitiatingProcessFileName, InitiatingProcessCommandLine
 | order by Timestamp asc
-3) C2 domain + initiating process
+```
+
+### 3) C2 domain + initiating process
+
+```kusto
 let dev = "as-pc1";
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 05:10:00);
@@ -164,7 +178,11 @@ DeviceNetworkEvents
 | where isnotempty(InitiatingProcessFileName)
 | project Timestamp, InitiatingProcessFileName, InitiatingProcessCommandLine, RemoteUrl, RemoteIP, RemotePort, Protocol
 | order by Timestamp asc
-4) Staging infrastructure (download domain in command line)
+```
+
+### 4) Staging infrastructure (download domain in command line)
+
+```kusto
 let dev = "as-pc2";
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
@@ -172,10 +190,14 @@ DeviceProcessEvents
 | where DeviceName == dev
 | where Timestamp between (t0 .. t1)
 | where ProcessCommandLine has "http"
-| where ProcessCommandLine has_any ("certutil","bitsadmin","invoke-webrequest","curl","wget")
+| where ProcessCommandLine has_any ("certutil", "bitsadmin", "invoke-webrequest", "curl", "wget")
 | project Timestamp, AccountName, FileName, ProcessCommandLine
 | order by Timestamp asc
-5) Credential extraction registry hive exports
+```
+
+### 5) Credential extraction registry hive exports
+
+```kusto
 let dev = "as-pc1";
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
@@ -186,16 +208,24 @@ DeviceProcessEvents
 | where ProcessCommandLine has "save"
 | project Timestamp, AccountName, ProcessCommandLine, InitiatingProcessFileName
 | order by Timestamp asc
-6) AnyDesk download method + password set
+```
+
+### 6) AnyDesk download method + password set
+
+```kusto
 let dev = "as-pc1";
 let anchor = datetime(2026-01-15 04:11:47.349);
 DeviceProcessEvents
 | where DeviceName == dev
 | where Timestamp between (anchor-5m .. anchor+5m)
-| where ProcessCommandLine has_any ("AnyDesk","--set-password")
+| where ProcessCommandLine has_any ("AnyDesk", "--set-password")
 | project Timestamp, AccountName, FileName, ProcessCommandLine, InitiatingProcessFileName, InitiatingProcessCommandLine
 | order by Timestamp asc
-7) Lateral movement evidence (RDP)
+```
+
+### 7) Lateral movement evidence (RDP)
+
+```kusto
 let dev = "as-pc2";
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
@@ -205,7 +235,11 @@ DeviceProcessEvents
 | where FileName =~ "mstsc.exe"
 | project Timestamp, AccountName, ProcessCommandLine
 | order by Timestamp asc
-8) Data access: payroll doc + edit artifact proof
+```
+
+### 8) Data access: payroll doc + edit artifact proof
+
+```kusto
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
 DeviceFileEvents
@@ -214,7 +248,11 @@ DeviceFileEvents
 | where FileName has "BACS_Payments_Dec2025"
 | project Timestamp, DeviceName, ActionType, FileName, FolderPath, InitiatingProcessFileName, InitiatingProcessAccountName
 | order by Timestamp asc
-9) Exfil archive creation + hash
+```
+
+### 9) Exfil archive creation + hash
+
+```kusto
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
 DeviceFileEvents
@@ -223,7 +261,11 @@ DeviceFileEvents
 | where ActionType == "FileCreated"
 | project Timestamp, DeviceName, FileName, FolderPath, SHA256, InitiatingProcessFileName, InitiatingProcessAccountName
 | order by Timestamp asc
-10) Anti-forensics: log clearing
+```
+
+### 10) Anti-forensics: log clearing
+
+```kusto
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
 DeviceProcessEvents
@@ -232,17 +274,27 @@ DeviceProcessEvents
 | where ProcessCommandLine has "cl"
 | project Timestamp, DeviceName, AccountName, ProcessCommandLine, InitiatingProcessFileName
 | order by Timestamp asc
-11) Reflective loading + tool name (memory only)
+```
+
+### 11) Reflective loading + tool name (memory only)
+
+```kusto
 let t0 = datetime(2026-01-15 03:40:00);
 let t1 = datetime(2026-01-15 07:30:00);
 DeviceEvents
 | where Timestamp between (t0 .. t1)
-| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where DeviceName in ("as-pc1", "as-pc2", "as-srv")
 | where ActionType == "ClrUnbackedModuleLoaded"
 | extend AF = parse_json(AdditionalFields)
 | project Timestamp, DeviceName, ActionType, Module=tostring(AF.ModuleILPathOrName), InitiatingProcessFileName, InitiatingProcessCommandLine
 | order by Timestamp asc
-🧩 Repo Structure (Suggested)
+```
+
+---
+
+## 🧩 Repo Structure (Suggested)
+
+```text
 .
 ├── README.md
 ├── queries/
@@ -257,18 +309,8 @@ DeviceEvents
 │   └── 09_anti_forensics_memory.kql
 └── assets/
     └── attack_flow_diagram.png  (optional later)
-👤 Author
+```
+
+## 👤 Author
 
 Brian Hannigan
-Cybersecurity Engineer | Threat Hunting | SIEM | Incident Response
-GitHub: https://github.com/brianhannigan
-
-
----
-
-If you want, I can also:
-- **split those KQL blocks into individual `.kql` files** exactly matching the repo structure above (so you can paste each into `/queries/`), and
-- generate an **`assets/attack_flow_diagram.svg`** version of the Mermaid flow so your GitHub looks extra polished.
-
-Just say the word.
-::contentReference[oaicite:0]{index=0}
