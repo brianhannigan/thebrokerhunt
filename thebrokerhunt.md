@@ -1,438 +1,112 @@
+# 🕵️ Threat Hunt Report: The Broker
 
-# SOC Analyst Portfolio Showcase – *The Broker*
+![Status](https://img.shields.io/badge/Status-Completed-brightgreen)
+![Platform](https://img.shields.io/badge/Platform-Microsoft%20Sentinel%20%2B%20MDE-blue)
+![Skill](https://img.shields.io/badge/Focus-Threat%20Hunting%20%7C%20IR%20%7C%20KQL-purple)
 
-# 🕵️ Threat Hunt: The Broker
-
-## 🎯 Objective
-
-Investigate suspicious administrative activity across enterprise Windows systems and determine:
-
-- How the attacker gained access  
-- How they moved laterally  
-- What data was accessed  
-- Whether persistence was established  
-- What anti-forensics techniques were used  
+> **What happened?**  
+> A fake “resume” file was opened. It secretly started an attack.  
+> The attacker stole credentials, moved to other computers, accessed payroll data, and tried to erase evidence.
 
 ---
 
-## 🔎 Investigation Summary
+## 📌 Quick Answers (CTF Flags / Findings)
 
-An attacker executed a malicious file disguised as a resume:
-Daniel_Richardson_CV.pdf.exe
+### Section 1 — Initial Access
+- **Initial Payload:** `daniel_richardson_cv.pdf.exe`  
+- **Payload SHA256:** `48b97fd91946e81e3e7742b3554585360551551cbf9398e1f34f4bc4eac3a6b5`
+- **Launch Method (Parent Process):** `explorer.exe`
+- **Spawned Windows Process:** `notepad.exe`
+- **Full Command Line:** `notepad.exe ""`
 
+### Section 2 — Command & Control + Staging
+- **C2 Domain:** `cdn.cloud-endpoint.net`
+- **C2 Process:** `daniel_richardson_cv.pdf.exe`
+- **Staging Domain:** `sync.cloud-endpoint.net`
 
-The intrusion involved:
+### Credential Access
+- **Registry Hives Targeted:** `SAM, SYSTEM`
+- **Local Staging Path:** `C:\Users\Public`
+- **Execution Identity:** `sophie.turner`
 
-- Credential harvesting (SharpChrome)
-- Reflective .NET assembly loading
-- Process injection into notepad.exe
-- Lateral movement via RDP
-- Scheduled task persistence
-- Backdoor account creation
-- Payroll data staging
-- Windows event log clearing
+### Discovery
+- **User Context Command:** `whoami.exe`
+- **Network Shares Command:** `net.exe view`
+- **Privileged Group Queried:** `administrators`
+
+### Remote Tool Persistence (AnyDesk)
+- **Remote Tool Installed:** `AnyDesk`
+- **AnyDesk SHA256:** `f42b635d93720d1624c74121b83794d706d4d064bee027650698025703d20532`
+- **Download Method:** `certutil.exe`
+- **Config File Accessed:** `C:\Users\Sophie.Turner\AppData\Roaming\AnyDesk\system.conf`
+- **Unattended Password Set:** `intrud3r!`
+- **Deployed On Hosts:** `as-pc1, as-pc2, as-srv`
+
+### Lateral Movement
+- **Failed Remote Tools Tried:** `wmic.exe, PsExec.exe`
+- **Target Host (Failed Attempts):** `AS-PC2`
+- **Successful Pivot Tool:** `mstsc.exe`
+- **Movement Path:** `as-pc1 > as-pc2 > as-srv`
+- **Compromised Account Used:** `david.mitchell`
+- **Account Activation Parameter:** `active:yes`
+- **Activation Performed By:** `david.mitchell`
+
+### Scheduled Task Persistence
+- **Task Name:** `MicrosoftEdgeUpdateCheck`
+- **Renamed Binary:** `RuntimeBroker.exe`
+- **Persistence SHA256:** `48b97fd91946e81e3e7742b3554585360551551cbf9398e1f34f4bc4eac3a6b5`
+- **Backdoor Account:** `svc_backup`
+
+### Data Access / Staging
+- **Sensitive Document:** `BACS_Payments_Dec2025.ods`
+- **Editing Artifact:** `.~lock.BACS_Payments_Dec2025.ods#`
+- **Access Origin Host:** `as-pc2`
+- **Archive Filename:** `Shares.7z`
+- **Archive SHA256:** `6886c0a2e59792e69df94d2cf6ae62c2364fda50a23ab44317548895020ab048`
+
+### Anti-Forensics & Memory (Final)
+- **Logs Cleared:** `System, Application`
+- **Reflective Loading ActionType:** `ClrUnbackedModuleLoaded`
+- **Memory Tool:** `SharpChrome`
+- **Host Process (Injected Into):** `notepad.exe`
 
 ---
 
-## 🧠 Key Technical Findings
+## 🧠 The Story (Simple Version)
 
-| Category | Finding |
-|-----------|----------|
-| Initial Access | Malicious executable disguised as resume |
-| Lateral Movement | mstsc.exe (RDP) |
-| Sensitive Data | BACS_Payments_Dec2025.ods |
-| Data Archive | Shares.7z |
-| Persistence | MicrosoftEdgeUpdateCheck scheduled task |
-| Backdoor Account | svc_backup |
-| Log Clearing | System, Application |
-| Reflective Load | ClrUnbackedModuleLoaded |
-| Memory Tool | SharpChrome |
-| Injection Target | notepad.exe |
+Think of this like a burglar story:
+
+1. **They tricked someone** into opening a fake resume file.
+2. **They called home** (C2) to get instructions.
+3. **They stole passwords** from the computer.
+4. **They moved to other computers** using Remote Desktop.
+5. **They grabbed payroll data** from a file server.
+6. **They packed it into a zip-like archive** (`Shares.7z`).
+7. **They set up persistence** (AnyDesk + scheduled task + backdoor account).
+8. **They tried to hide** by clearing Windows logs.
+9. **We still caught them** because Defender/Sentinel kept strong telemetry.
 
 ---
 
-## 🛠 Example Detection Query
-
-```kql
-DeviceEvents
-| where ActionType == "ClrUnbackedModuleLoaded"
-| extend AF = parse_json(AdditionalFields)
-| project Timestamp, DeviceName, ModuleName=tostring(AF.ModuleILPathOrName)
-```
-
-🧭 MITRE ATT&CK Techniques Observed
-
-T1055 – Process Injection
-
-T1620 – Reflective Code Loading
-
-T1070.001 – Log Clearing
-
-T1555 – Credentials from Web Browsers
-
-T1021 – Remote Services (RDP)
-
-T1053 – Scheduled Task Persistence
-
-
-🏁 Final Assessment
-
-The Broker scenario demonstrates:
-
-Human-operated intrusion behavior
-
-Fileless .NET malware execution
-
-Credential harvesting from browser stores
-
-Anti-forensics log clearing
-
-Data staging prior to exfiltration
-
-Despite attempts to hide activity, telemetry reconstruction revealed the complete attack chain.
-
-
-# Attack Flow Diagram – The Broker
+## 🗺️ Attack Flow Diagram
 
 ```mermaid
 flowchart LR
-
-A[User Opens Fake Resume<br>Daniel_Richardson_CV.pdf.exe]
---> B[Initial Compromise<br>as-pc1]
-
-B --> C[Credential Theft Tool Loaded<br>SharpChrome]
-C --> D[Reflective .NET Load<br>ClrUnbackedModuleLoaded]
-
-D --> E[Injected into notepad.exe]
-
-E --> F[Lateral Movement via RDP<br>mstsc.exe]
-
-F --> G[as-pc2]
-G --> H[Accessed Payroll Share<br>BACS_Payments_Dec2025.ods]
-
-H --> I[Archive Created<br>Shares.7z]
-
-I --> J[Persistence Created<br>Scheduled Task + svc_backup]
-
-J --> K[Logs Cleared<br>System, Application]
-```
-
-📌 Executive Summary
-
-Executive Incident Summary – The Broker
-
-I conducted a full threat hunt investigation across enterprise Windows systems after detecting suspicious administrative behavior.
-
-Key Findings:
-
-A malicious executable disguised as a resume was launched.
-
-A credential theft tool (SharpChrome) was reflectively loaded into memory.
-
-The tool was injected into notepad.exe to evade detection.
-
-RDP was used for lateral movement.
-
-Payroll data was accessed and archived.
-
-A scheduled task and backdoor account were created.
-
-Windows event logs (System & Application) were cleared to hide evidence.
-
-Advanced Techniques Identified:
-
-Fileless .NET reflective loading (ClrUnbackedModuleLoaded)
-
-Process injection (T1055)
-
-Anti-forensics log clearing
-
-Credential harvesting
-
-Data staging for potential exfiltration
-
-Outcome:
-
-Despite log clearing and memory-based execution, full attack reconstruction was achieved through telemetry correlation and advanced KQL hunting.
-
-This investigation highlights skills in:
-
-Microsoft Defender Advanced Hunting
-
-Sentinel / KQL
-
-Threat hunting methodology
-
-MITRE ATT&CK mapping
-
-Timeline reconstruction
-
-Incident response analysis
-
-
-An attacker broke into the network.
-
-They:
-
-Used stolen credentials.
-
-Moved from one computer to another.
-
-Created a fake admin account.
-
-Installed a hidden scheduled task.
-
-Stole payroll data.
-
-Cleared logs to hide their tracks.
-
-Loaded a credential-stealing tool directly into memory.
-
-Injected that tool into a normal Windows program to avoid detection.
-
-Even though they tried to hide, we found everything.
-
-🎯 Scope of Investigation
-
-Time Range:
-
-let t0 = datetime(2026-01-15 03:40:00);
-let t1 = datetime(2026-01-15 07:30:00);
-
-Systems Investigated:
-
-as-pc1
-
-as-pc2
-
-as-srv
-
-🧭 Attack Timeline (Plain English)
-Time	What Happened
-~03:31	Malicious PDF executable launched
-~04:29	Lateral movement via RDP
-~04:46	Payroll document accessed and modified
-~04:52	Payload downloaded & renamed
-~05:09	Reflective .NET module loaded in memory
-~05:16	Defender alert triggered for assembly injection
-After	Logs cleared to hide evidence
-🔓 Initial Access
-
-The attacker tricked a user into running:
-
-Daniel_Richardson_CV.pdf.exe
-
-This file:
-
-Was disguised as a resume
-
-Was actually malware
-
-Had SHA256:
-
-48b97fd91946e81e3e7742b3554585360551551cbf9398e1f34f4bc4eac3a6b5
-🧱 Lateral Movement
-
-The attacker attempted multiple remote execution methods:
-
-wmic.exe
-
-PsExec.exe
-
-These failed.
-
-They succeeded using:
-
-mstsc.exe
-
-Movement path:
-
-as-pc1 > as-pc2 > as-srv
-
-Compromised account:
-
-david.mitchell
-🧬 Persistence
-Scheduled Task Created
-
-Task name:
-
-MicrosoftEdgeUpdateCheck
-Renamed Payload
-RuntimeBroker.exe
-
-SHA256:
-
-48b97fd91946e81e3e7742b3554585360551551cbf9398e1f34f4bc4eac3a6b5
-Backdoor Account Created
-svc_backup
-💰 Data Access & Staging
-Sensitive File Accessed
-BACS_Payments_Dec2025.ods
-Proof It Was Edited
-.~lock.BACS_Payments_Dec2025.ods#
-
-Access origin:
-
-as-pc2
-Data Archived for Exfiltration
-
-Archive created:
-
-Shares.7z
-
-SHA256:
-
-6886c0a2e59792e69df94d2cf6ae62c2364fda50a23ab44317548895020ab048
-🧨 SECTION 9: Anti-Forensics & Memory
-
-This is where the attacker tried hardest to hide.
-
-🚩 Log Clearing
-
-The attacker cleared Windows event logs using:
-
-wevtutil.exe
-
-Logs cleared:
-
-System, Application
-KQL Evidence
-let t0 = datetime(2026-01-15 03:40:00);
-let t1 = datetime(2026-01-15 07:30:00);
-SecurityEvent
-| where TimeGenerated between (t0 .. t1)
-| where EventID == 4688
-| extend NewProcessName = tostring(EventData.NewProcessName),
-         CommandLine = tostring(EventData.CommandLine)
-| where NewProcessName endswith @"\wevtutil.exe"
-| where CommandLine has " cl "
-| project TimeGenerated, Computer, Account, CommandLine
-
-Observed:
-
-wevtutil.exe cl System
-wevtutil.exe cl Application
-
-MITRE: T1070.001 – Clear Windows Event Logs
-
-🚩 Reflective Loading
-
-The attacker loaded a .NET assembly directly into memory.
-
-No file was written to disk.
-
-Recorded ActionType
-ClrUnbackedModuleLoaded
-
-This means:
-
-A .NET module was loaded into memory without a backing file.
-
-That is textbook reflective loading.
-
-KQL Evidence
-let t0 = datetime(2026-01-15 03:40:00);
-let t1 = datetime(2026-01-15 07:30:00);
-DeviceEvents
-| where Timestamp between (t0 .. t1)
-| where ActionType == "ClrUnbackedModuleLoaded"
-| extend AF = parse_json(AdditionalFields)
-| project Timestamp, DeviceName, AF
-🚩 Memory Tool Identified
-
-The injected module name:
-
-SharpChrome
-
-SharpChrome is:
-
-A .NET credential theft tool
-
-Used to dump browser-stored passwords
-
-Frequently executed reflectively
-
-🚩 Host Process
-
-The malicious .NET assembly was injected into:
-
-notepad.exe
-
-This is classic defense evasion:
-
-Hide malicious code inside a trusted Windows process
-
-Blend in with normal system activity
-
-🧠 Why This Matters
-
-The attacker:
-
-Cleared logs to hide evidence
-
-Used fileless malware
-
-Injected code into trusted processes
-
-Stole payroll financial data
-
-Created persistent access
-
-Used stolen credentials for movement
-
-This is human-operated intrusion activity — not automated malware.
-
-🛡 MITRE ATT&CK Mapping
-Technique	ID
-Process Injection	T1055
-Reflective Code Loading	T1620
-Clear Windows Event Logs	T1070.001
-Scheduled Task Persistence	T1053
-Credential Dumping (Browser)	T1555
-Remote Services (RDP)	T1021
-Account Manipulation	T1098
-📊 Final Findings Summary
-Category	Result
-Logs Cleared	System, Application
-Reflective Load ActionType	ClrUnbackedModuleLoaded
-In-Memory Tool	SharpChrome
-Host Process	notepad.exe
-Sensitive Data	Payroll ODS File
-Archive Staged	Shares.7z
-Backdoor Account	svc_backup
-🧾 Conclusion (Simple Version)
-
-The attacker:
-
-Got in using a fake resume.
-
-Moved between machines.
-
-Created persistence.
-
-Stole payroll data.
-
-Tried to erase their tracks.
-
-Used advanced memory injection to avoid detection.
-
-Even though they tried to hide,
-the telemetry told the full story.
-
-🏁 Final Assessment
-
-This incident demonstrates:
-
-Advanced memory-based attack techniques
-
-Credential harvesting
-
-Anti-forensics log clearing
-
-Lateral movement with valid credentials
-
-Data staging prior to exfiltration
-
-This was not a script kiddie.
-This was an operator.
+A[User Opens Fake Resume<br>daniel_richardson_cv.pdf.exe] --> B[Initial Access<br>as-pc1]
+B --> C[C2 Traffic<br>cdn.cloud-endpoint.net]
+B --> D[Staging Domain Used<br>sync.cloud-endpoint.net]
+
+B --> E[Credential Access<br>reg save SAM + SYSTEM]
+E --> F[Staged Locally<br>C:\Users\Public]
+
+B --> G[Memory Tool Loaded<br>SharpChrome]
+G --> H[Reflective Load<br>ClrUnbackedModuleLoaded]
+H --> I[Injected Into<br>notepad.exe]
+
+I --> J[Lateral Movement<br>mstsc.exe]
+J --> K[as-pc2]
+K --> L[File Server Access<br>BACS_Payments_Dec2025.ods]
+L --> M[Archive Created<br>Shares.7z]
+
+M --> N[Persistence Added<br>AnyDesk + Task + svc_backup]
+N --> O[Logs Cleared<br>System + Application]
