@@ -60,7 +60,7 @@
     <text x="260" y="40">• Remote execution attempts (WMIC / PsExec)</text>
     <text x="580" y="40">• RDP pivot (mstsc.exe)</text>
     <text x="760" y="40">• Scheduled task persistence</text>
-    <text x="970" y="40">• Data staging +amp; archive creation</text>
+    <text x="970" y="40">• Data staging &amp; archive creation</text>
   </g>
 
   <!-- Accent side bar -->
